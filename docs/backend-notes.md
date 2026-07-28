@@ -7,6 +7,8 @@ These notes explain the backend setup as we build it. The goal is to keep source
 - [Project Shape](#project-shape)
 - [Initial NestJS Structure](#initial-nestjs-structure)
 - [Environment Configuration](#environment-configuration)
+- [API Bootstrap](#api-bootstrap)
+- [Database Direction](#database-direction)
 - [Global Validation](#global-validation)
   - [`whitelist: true`](#whitelist-true)
   - [`forbidNonWhitelisted: true`](#forbidnonwhitelisted-true)
@@ -46,20 +48,114 @@ GET / -> AppController -> AppService -> "Hello World!"
 
 We installed `@nestjs/config` so the app can read environment variables in a Nest-friendly way.
 
-Examples of environment variables this API will eventually need:
+Current environment variables:
 
 ```text
-PORT=5500
-DATABASE_URL=postgresql://...
-FRONTEND_URL=http://localhost:3000
-NODE_ENV=development
+PORT=4800
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001,https://deviyke-labs.vercel.app
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/postgres"
 ```
 
-Current decision:
+Current decisions:
 
-- Use `.env.example` to document required environment variables.
+- Use `.env` for real local values.
+- Use `.env.example` to document required variables with safe examples/placeholders.
 - Ignore real `.env` files so secrets do not get committed.
-- Use port `5500` for the backend because the frontend often uses `3000`.
+- Use port `4800` for the backend because frontend dev servers often use `3000` or `3001`.
+- Store multiple CORS origins as a comma-separated string.
+
+Practical CORS example:
+
+```text
+CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
+The app parses that string into:
+
+```ts
+['http://localhost:3000', 'http://localhost:3001']
+```
+
+This lets both frontend dev servers call the backend.
+
+## API Bootstrap
+
+The app currently uses a global route prefix:
+
+```text
+/api/v1
+```
+
+So the starter route is:
+
+```text
+GET /api/v1
+```
+
+Swagger is available outside the versioned API prefix at:
+
+```text
+/api/docs
+```
+
+Why use `/api/v1`:
+
+- It gives the frontend a stable API contract.
+- It keeps future breaking changes possible without immediately removing v1.
+- New features do not automatically require v2. A new API version is mainly for breaking request or response changes.
+
+Practical versioning example:
+
+```text
+GET /api/v1/projects
+GET /api/v2/projects
+```
+
+Both can exist at the same time while the frontend gradually migrates.
+
+## Database Direction
+
+We are using Supabase to host the PostgreSQL database for now.
+
+Current architecture:
+
+```text
+portfolio-web -> deviyke-labs-api -> Prisma -> Supabase Postgres
+```
+
+The frontend should not talk directly to Supabase for this backend-owned content. The NestJS API stays responsible for business rules and response shapes.
+
+Database naming decision:
+
+```text
+deviyke-labs-dev
+deviyke-labs-prod
+```
+
+Why keep dev and prod separate:
+
+- Dev data can be fake, reset, or migrated often.
+- Production data should stay stable for the live portfolio.
+- The same backend code can use different `DATABASE_URL` values per environment.
+
+Supabase connection decision for local development:
+
+- Use the Session pooler connection string for Prisma/local app traffic.
+- It is IPv4-friendly and ends with port `5432`.
+- Avoid the Transaction pooler for now because it is better suited to serverless/short-lived connections.
+- Avoid putting the real connection string in Git.
+
+`.env` example locally:
+
+```text
+DATABASE_URL="real-session-pooler-url"
+```
+
+`.env.example` placeholder:
+
+```text
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/postgres"
+```
 
 ## Global Validation
 
