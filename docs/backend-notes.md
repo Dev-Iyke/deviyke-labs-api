@@ -9,6 +9,8 @@ These notes explain the backend setup as we build it. The goal is to keep source
 - [Environment Configuration](#environment-configuration)
 - [API Bootstrap](#api-bootstrap)
 - [Database Direction](#database-direction)
+- [Prisma ORM](#prisma-orm)
+- [Branching Checkpoints](#branching-checkpoints)
 - [Global Validation](#global-validation)
   - [`whitelist: true`](#whitelist-true)
   - [`forbidNonWhitelisted: true`](#forbidnonwhitelisted-true)
@@ -157,6 +159,99 @@ DATABASE_URL="real-session-pooler-url"
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/postgres"
 ```
 
+## Prisma ORM
+
+We installed:
+
+```text
+prisma
+@prisma/client
+```
+
+`prisma` is the CLI/tooling package. It gives us commands such as:
+
+```text
+npx prisma init
+npx prisma validate
+npx prisma migrate dev
+npx prisma generate
+npx prisma studio
+```
+
+`@prisma/client` is the runtime package the NestJS app uses to query the database from TypeScript.
+
+Practical mental model:
+
+```text
+Nest service -> Prisma Client -> Supabase Postgres
+```
+
+Prisma v7 initialization created:
+
+```text
+prisma/schema.prisma
+prisma.config.ts
+```
+
+`prisma/schema.prisma` is where we define database models.
+
+`prisma.config.ts` tells the Prisma CLI where the schema and migrations live, and how to read `DATABASE_URL`.
+
+Prisma also generated AI-tool skill folders:
+
+```text
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+```
+
+Those are useful for local tooling, but they are not part of the backend application source code, so we ignore them in Git.
+
+The generated Prisma Client output is also ignored:
+
+```text
+generated/
+```
+
+That folder can be recreated with:
+
+```text
+npx prisma generate
+```
+
+Why generated code is ignored:
+
+- It can be recreated from `prisma/schema.prisma`.
+- It prevents noisy commits.
+- It keeps the schema as the source of truth.
+
+## Branching Checkpoints
+
+After the NestJS foundation was pushed, we added the database foundation on the setup branch:
+
+`	ext
+prisma
+@prisma/client
+dotenv
+prisma/schema.prisma
+prisma.config.ts
+` 
+
+This is a clean checkpoint before feature work because Prisma is installed, initialized, and validated, but no business tables have been added yet.
+
+Recommended branch flow:
+
+`	ext
+app-setup -> commit database foundation -> push -> create feature/contact-submissions
+` 
+
+Why feature branches help:
+
+- Foundation changes stay easy to review.
+- Contact-specific schema, migration, DTO, controller, and service work stays grouped together.
+- If the contact feature needs adjustment, it does not muddy the setup checkpoint.
+
 ## Global Validation
 
 We installed:
@@ -242,3 +337,5 @@ Query values arrive as strings:
 ```
 
 Later, with DTO decorators, we can convert `limit` into a number and `featured` into a boolean so service logic does not need to parse strings everywhere.
+
+
