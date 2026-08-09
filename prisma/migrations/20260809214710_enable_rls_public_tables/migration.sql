@@ -1,0 +1,1 @@
+ALTER TABLE public."ContactSubmission" ENABLE ROW LEVEL SECURITY;
