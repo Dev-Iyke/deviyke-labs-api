@@ -1,11 +1,12 @@
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
 
   // Validation
   app.useGlobalPipes(
@@ -23,10 +24,24 @@ async function bootstrap() {
   const corsOrigins = configService
     .get<string>('CORS_ORIGINS', 'http://localhost:3000')
     .split(',')
-    .map((origin) => origin.trim());
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  logger.log(`Configured CORS origins: ${corsOrigins.join(', ')}`);
 
   app.enableCors({
-    origin: corsOrigins,
+    origin: (
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) => {
+      const isAllowed = !origin || corsOrigins.includes(origin);
+
+      if (!isAllowed) {
+        logger.warn(`Blocked CORS origin: ${origin}`);
+      }
+
+      callback(null, isAllowed);
+    },
   });
 
   const swaggerConfig = new DocumentBuilder()
