@@ -14,6 +14,7 @@ These notes explain the backend setup as we build it. The goal is to keep source
 - [Prisma In NestJS](#prisma-in-nestjs)
 - [Prisma Migration Workflow](#prisma-migration-workflow)
 - [Prisma Error Handling](#prisma-error-handling)
+- [Deployment](#deployment)
 - [Branching Checkpoints](#branching-checkpoints)
 - [Global Validation](#global-validation)
   - [`whitelist: true`](#whitelist-true)
@@ -514,6 +515,168 @@ Success responses -> small successResponse helper
 Validation and framework errors -> Nest default error responses
 Prisma/domain-specific errors -> catch in the service only when we intentionally need a clearer HTTP exception
 ```
+## Deployment
+
+The production backend is deployed as a Render Web Service.
+
+Current production URL:
+
+```text
+https://deviyke-labs-api.onrender.com
+```
+
+Important routes:
+
+```text
+GET  /api/v1
+GET  /api/docs
+POST /api/v1/contact-submissions
+```
+
+Deployment architecture:
+
+```text
+portfolio-web -> Render NestJS API -> Prisma -> Supabase Postgres prod database
+```
+
+Production database decision:
+
+```text
+deviyke-labs-dev  -> local/development DATABASE_URL
+deviyke-labs-prod -> Render/production DATABASE_URL
+```
+
+The production database is not copied from the dev database. It is built by applying the committed Prisma migration files to the prod database.
+
+Practical mental model:
+
+```text
+prisma/schema.prisma = current desired database shape
+prisma/migrations/ = step-by-step history for building that shape
+dev Supabase DB = one database that has applied those steps
+prod Supabase DB = another database that applies those same steps
+```
+
+Render build/start configuration:
+
+```text
+Build Command:
+npm install --include=dev && npm run build
+
+Start Command:
+npm run db:migrate:deploy && npm run start:prod
+
+Health Check Path:
+/api/v1
+```
+
+Why build uses `--include=dev`:
+
+- `nest build` needs `@nestjs/cli`, which currently lives in `devDependencies`.
+- Prisma generation/build tooling also runs during build.
+- Render may otherwise install production dependencies only, causing errors like `nest: not found`.
+
+Why we currently use `npm install` instead of `npm ci` on Render:
+
+- `npm ci` is stricter and failed when the lockfile did not match the dependency tree Render expected.
+- `npm install --include=dev` got the deployment unstuck while still installing the tools needed for build.
+- Later, we can clean the lockfile and return to `npm ci --include=dev` for stricter reproducible installs.
+
+Production scripts:
+
+```json
+{
+  "prisma:generate": "prisma generate",
+  "build": "npm run prisma:generate && nest build",
+  "db:migrate:deploy": "prisma migrate deploy",
+  "start:prod": "node dist/src/main"
+}
+```
+
+Why `start:prod` uses `dist/src/main`:
+
+- Nest currently emits the compiled entry file at `dist/src/main.js`.
+- `node dist/main` failed on Render because that file did not exist.
+
+Why migrations run in the start command:
+
+- Render Free does not provide a Pre-Deploy Command.
+- The start command first applies pending migrations, then starts the compiled app.
+- `prisma migrate deploy` is safe for production because it only applies committed migration files and does not create new migrations.
+
+Deployment logs should show:
+
+```text
+Generated Prisma Client
+Build successful
+No pending migrations to apply
+Nest application successfully started
+Mapped {/api/v1/contact-submissions, POST} route
+```
+
+Render environment variables:
+
+```text
+DATABASE_URL=prod Supabase session-pooler URL
+CORS_ORIGINS=https://frontend-domain.com,http://localhost:3000,http://localhost:3001
+NODE_ENV=production
+```
+
+Do not manually set `PORT` unless the platform requires it. Render provides a `PORT`, and the app already reads `process.env.PORT` through `ConfigService`.
+
+CORS note:
+
+`CORS_ORIGINS` should contain frontend origins, not backend API URLs.
+
+Correct examples:
+
+```text
+https://deviyke-labs.vercel.app
+http://localhost:3000
+http://localhost:3001
+```
+
+Wrong example:
+
+```text
+https://deviyke-labs-api.onrender.com/api/v1/contact-submissions
+```
+
+Supabase production project security setup:
+
+- Use the Session pooler connection string for `DATABASE_URL`.
+- Disable automatically exposing new tables if possible.
+- Enable automatic RLS as a safety net.
+- Still keep explicit RLS lines in migrations for app tables so the security state is visible in Git.
+
+Current RLS migration rule:
+
+```text
+App tables -> RLS through Prisma migration files
+Prisma internal tables -> optional one-time SQL Editor fix, not Prisma migrations
+```
+
+Example future table migration:
+
+```sql
+-- Prisma generates the CREATE TABLE statement.
+CREATE TABLE "Project" (...);
+
+-- We manually add the RLS line before applying the migration.
+ALTER TABLE public."Project" ENABLE ROW LEVEL SECURITY;
+```
+
+Node version note:
+
+Render currently defaults new Node services to a recent Node version, but defaults can change over time. Render supports pinning Node through the `NODE_VERSION` env var, `.node-version`, `.nvmrc`, or `package.json` `engines`. For stability, we should pin an LTS version before relying on this deployment long-term.
+
+Render docs:
+
+```text
+https://render.com/docs/node-version
+https://render.com/docs/web-services
+https://render.com/docs/environment-variables
+```
 ## Branching Checkpoints
 
 After the NestJS foundation was pushed, we added the database foundation on the setup branch:
@@ -625,5 +788,7 @@ Query values arrive as strings:
 ```
 
 Later, with DTO decorators, we can convert `limit` into a number and `featured` into a boolean so service logic does not need to parse strings everywhere.
+
+
 
 
