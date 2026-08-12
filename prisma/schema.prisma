@@ -13,8 +13,22 @@ datasource db {
   provider = "postgresql"
 }
 
-// Models
+// Enums
+enum ProjectEvidenceStatus {
+  SHIPPED
+  ACTIVE_BUILD
+  EXPERIMENT
+}
 
+enum ProjectImpactArea {
+  FRONTEND_ARCHITECTURE
+  PRODUCT_INTERFACE
+  BACKEND_FOUNDATION
+  WORKFLOW_DESIGN
+  PERFORMANCE_ACCESSIBILITY
+}
+
+// Models
 model ContactSubmission {
   id        String   @id @default(cuid())
   name      String
@@ -22,4 +36,50 @@ model ContactSubmission {
   subject   String?
   message   String
   createdAt DateTime @default(now())
+}
+
+model Project {
+  // Direct columns
+  id             String                @id @default(cuid())
+  slug           String                @unique
+  title          String
+  kicker         String
+  summary        String
+  heroImageSrc   String?
+  heroImageAlt   String?
+  evidenceStatus ProjectEvidenceStatus
+  role           String
+  timeframe      String
+  projectType    String?
+
+  // Ordering/Display Layer
+  featured      Boolean @default(false)
+  featuredOrder Int?
+  displayOrder  Int?
+
+  // Columns used in nested objects
+  stack         Json
+  impactAreas   ProjectImpactArea[]
+  highlights    Json
+  links         Json
+  surfaces      Json
+  features      Json
+  outcomes      Json
+  talkingPoints Json
+
+  problem     String
+  approach    String
+  outcome     String?
+  backendNote String?
+  privacyNote String
+  decisions   Json
+  challenges  Json
+  nextSteps   Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([featured, featuredOrder])
+  @@index([displayOrder])
+  @@index([evidenceStatus])
 }
