@@ -13,6 +13,8 @@ These notes explain the backend setup as we build it. The goal is to keep source
 - [Prisma ORM](#prisma-orm)
 - [Prisma In NestJS](#prisma-in-nestjs)
 - [Prisma Migration Workflow](#prisma-migration-workflow)
+- [Prisma Seeding](#prisma-seeding)
+- [Projects Content Model](#projects-content-model)
 - [Prisma Error Handling](#prisma-error-handling)
 - [Deployment](#deployment)
 - [Branching Checkpoints](#branching-checkpoints)
@@ -434,6 +436,221 @@ prisma/migrations/20260729152952_create_contact_submissions/migration.sql
 ```
 
 That SQL creates the `ContactSubmission` table in Postgres.
+For Supabase public-schema tables, we also add RLS inside the same migration when possible:
+
+```sql
+ALTER TABLE public."Project" ENABLE ROW LEVEL SECURITY;
+```
+
+This keeps the table protected from accidental Supabase Data API exposure, even though the main app flow is:
+
+```text
+Frontend -> Nest API -> Prisma -> Supabase Postgres
+```
+
+When creating a new app table, the preferred workflow is:
+
+```text
+Edit prisma/schema.prisma
+Run npx prisma migrate dev --name create_projects --create-only
+Open the generated migration.sql
+Add the table-specific RLS line
+Run npx prisma migrate dev
+Run npx prisma generate
+```
+
+Do not add `_prisma_migrations` RLS changes inside Prisma migrations. Prisma's shadow database may not have that internal table while replaying migrations.
+
+## Prisma Seeding
+
+A seed script inserts starter data into the database.
+
+For DevIyke Labs, seeds are useful because portfolio content starts from known project/blog/profile records before admin editing exists.
+
+Current seed setup:
+
+```text
+prisma/seed.ts
+prisma/data/projects.seed.ts
+```
+
+`prisma/seed.ts` is the runner. It connects to the database and calls seed functions.
+
+`prisma/data/projects.seed.ts` holds project content.
+
+Prisma v7 seed config lives in `prisma.config.ts`:
+
+```ts
+migrations: {
+  path: 'prisma/migrations',
+  seed: 'tsx prisma/seed.ts',
+}
+```
+
+We use `tsx` instead of `ts-node` because the generated Prisma v7 TypeScript client works better with this project's modern Node/TypeScript module setup.
+
+The seed uses `upsert`:
+
+```ts
+await prisma.project.upsert({
+  where: { slug: project.slug },
+  update: project,
+  create: project,
+});
+```
+
+Practical meaning:
+
+```text
+If the slug exists -> update the existing row
+If the slug does not exist -> create a new row
+```
+
+That makes seeds safe to run multiple times while we refine the project content.
+
+Run seeds with:
+
+```text
+npx prisma db seed
+```
+
+Seed data can transform frontend-friendly values into database enum values.
+
+Example:
+
+```ts
+'active-build' -> ProjectEvidenceStatus.ACTIVE_BUILD
+'backend-foundation' -> ProjectImpactArea.BACKEND_FOUNDATION
+```
+
+This is normal backend mapping: the original content shape and the database shape do not have to be identical.
+
+## Projects Content Model
+
+The Projects feature starts as one `Project` table.
+
+This is a v1 choice to avoid over-normalizing before admin exists.
+
+Instead of creating many related tables immediately, repeatable nested content is stored in JSON fields:
+
+```text
+stack
+highlights
+links
+surfaces
+features
+outcomes
+talkingPoints
+decisions
+challenges
+nextSteps
+```
+
+JSON can still hold structured data.
+
+Example `features` value:
+
+```json
+[
+  {
+    "name": "JWT authentication and protected access",
+    "roles": ["Users"],
+    "description": "Users can move through account-aware flows.",
+    "engineering": "JWT-based authentication and protected route handling."
+  }
+]
+```
+
+Important tradeoff:
+
+- JSON keeps v1 simple and close to the frontend shape.
+- JSON does not deeply enforce nested object structure at the database level.
+- Later admin workflows may justify normalizing some JSON fields into related tables.
+
+Fields that deserve direct columns now:
+
+```text
+slug
+title
+kicker
+summary
+heroImageSrc
+heroImageAlt
+evidenceStatus
+role
+timeframe
+projectType
+featured
+featuredOrder
+displayOrder
+problem
+approach
+outcome
+backendNote
+privacyNote
+createdAt
+updatedAt
+```
+
+`slug` is unique because it is the public lookup key for routes such as:
+
+```text
+/work/mini-mart
+GET /api/v1/projects/mini-mart
+```
+
+`featured`, `featuredOrder`, and `displayOrder` let the backend own project ordering.
+
+Practical examples:
+
+```text
+Homepage selected work -> featured=true ordered by featuredOrder
+Work index page -> all projects ordered by displayOrder
+```
+
+Prisma indexes support common lookup/sort patterns:
+
+```prisma
+@@index([featured, featuredOrder])
+@@index([displayOrder])
+@@index([evidenceStatus])
+```
+
+An index is like a shortcut the database keeps for common questions.
+
+Example:
+
+```ts
+await prisma.project.findMany({
+  where: { featured: true },
+  orderBy: { featuredOrder: 'asc' },
+});
+```
+
+The `@@index([featured, featuredOrder])` index helps this kind of query.
+
+Images are stored as strings for v1:
+
+```text
+heroImageSrc="/projects/noonprep/noonprep-landing-banner.png"
+heroImageAlt="NoonPrep landing page preview"
+```
+
+The backend stores the path. The frontend still serves the actual file from its public assets.
+
+Cloudinary or Supabase Storage becomes important later when admin users need to upload/manage images.
+
+Enums are controlled lists:
+
+```prisma
+enum ProjectEvidenceStatus {
+  SHIPPED
+  ACTIVE_BUILD
+  EXPERIMENT
+}
+```
+
+Adding enum values later is allowed through a new migration. Renaming or removing enum values needs more care because existing rows may already use the old value.
 
 ## Prisma Error Handling
 
@@ -788,6 +1005,7 @@ Query values arrive as strings:
 ```
 
 Later, with DTO decorators, we can convert `limit` into a number and `featured` into a boolean so service logic does not need to parse strings everywhere.
+
 
 
 
