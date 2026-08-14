@@ -9,6 +9,7 @@
     "prisma:generate": "prisma generate",
     "build": "npm run prisma:generate && nest build",
     "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
