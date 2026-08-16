@@ -514,6 +514,33 @@ Run seeds with:
 npx prisma db seed
 ```
 
+Current package script:
+
+```text
+npm run db:seed
+```
+
+Before admin exists, seed files are the source of truth for portfolio content.
+
+Practical rule:
+
+```text
+Before admin -> seed files own content
+After admin -> database/admin UI owns content
+```
+
+Direct database edits through Supabase Table Editor or pgAdmin can be useful for quick experiments, but final intended content changes should go back into seed files so dev and prod can be recreated consistently.
+
+Example:
+
+```text
+Change featured projects in prisma/data/projects.seed.ts
+Run npm run db:seed against dev
+Run npm run db:seed against prod when intentionally updating production content
+```
+
+For the Projects seed, `featuredProjectSlugs` controls both which projects are featured and the homepage featured order. The individual frontend `featured` values are not the final authority once the backend seed mapping derives featured state from that slug list.
+
 Seed data can transform frontend-friendly values into database enum values.
 
 Example:
@@ -1005,6 +1032,7 @@ Query values arrive as strings:
 ```
 
 Later, with DTO decorators, we can convert `limit` into a number and `featured` into a boolean so service logic does not need to parse strings everywhere.
+
 
 
 
