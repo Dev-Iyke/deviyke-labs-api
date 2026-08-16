@@ -1,5 +1,6 @@
-import { Controller, Get, Param } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { FindProjectsQueryDto } from "src/projects/dto/find-projects-query.dto";
 import { ProjectsService } from "src/projects/projects.service";
 
 @ApiTags("Projects")
@@ -9,8 +10,8 @@ export class ProjectsController {
 
   @Get()
   @ApiOperation({summary: "Get all projects"})
-  findAll(){
-    return this.projectsService.findAll()
+  findAll(@Query() query: FindProjectsQueryDto){
+    return this.projectsService.findAll(query)
   }
 
   @Get(":slug")

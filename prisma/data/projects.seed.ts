@@ -1562,7 +1562,7 @@ export const projectSeeds = sourceProjects.map((project, index) => {
     role: project.role,
     timeframe: project.timeframe,
     projectType: project.projectType ?? null,
-    featured: project.featured,
+    featured: featuredIndex !== -1,
     featuredOrder: featuredIndex === -1 ? null : featuredIndex + 1,
     displayOrder: index + 1,
     stack: toJsonValue(project.stack),

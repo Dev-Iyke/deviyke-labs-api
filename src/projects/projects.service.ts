@@ -2,14 +2,19 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Project } from "generated/prisma/client";
 import { successResponse } from "src/common/responses/api-response";
 import { PrismaService } from "src/prisma/prisma.service";
+import { FindProjectsQueryDto } from "src/projects/dto/find-projects-query.dto";
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(query: FindProjectsQueryDto) {
+    console.log(query)
+    const featuredQuery = query.featured === undefined ? undefined : query.featured === "true"
+    console.log(featuredQuery)
     const projects = await this.prisma.project.findMany({
-      orderBy: [{displayOrder: "asc"}, {createdAt: "desc"}]
+      where: featuredQuery === undefined ? undefined : {featured: featuredQuery},
+      orderBy: featuredQuery === true ? [{featuredOrder: "asc"}, {displayOrder: "asc"}] : [{displayOrder: "asc"}, {createdAt: "desc"}] 
     })
 
     return successResponse(
